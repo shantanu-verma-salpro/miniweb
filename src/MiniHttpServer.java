@@ -58,24 +58,20 @@ public class MiniHttpServer {
                 return;
             }
             CompletableFuture<HttpResponse> resp_f = CompletableFuture.supplyAsync(() -> h.apply(req), executor);
+
             resp_f.thenAccept(r -> {
                 boolean keepAlive = false;
                 List<String> connectionHeaders = req.getHeader("Connection");
-                if (connectionHeaders != null && connectionHeaders.contains("Keep-Alive")) {
+                if (connectionHeaders != null && connectionHeaders.stream().anyMatch(x -> x.equalsIgnoreCase("Keep-Alive"))) {
                     keepAlive = true;
                 }
 
-                HttpResponse.Create responseBuilder = new HttpResponse.Create()
-                        .setStatusCode(200)
-                        .setResponseHeader(req.getRequestHeader())
-                        .setEntity(Optional.of("Hello"));
 
-                String response = responseBuilder.build().toString();
                 try {
-                    client.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
-
+                    client.write(ByteBuffer.wrap(r.toString().getBytes(StandardCharsets.UTF_8)));
                     if (!keepAlive) {
                         client.close();
+                        System.err.println("[+] Connection to client closed 74");
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -83,6 +79,7 @@ public class MiniHttpServer {
                     if (!keepAlive) {
                         try {
                             client.close();
+                            System.err.println("[+] Connection to client closed 82");
                         } catch (IOException ex) {
                             ex.printStackTrace();
                         }
@@ -95,8 +92,10 @@ public class MiniHttpServer {
                         .setStatusCode(404).setEntity(Optional.of("Route not found"))
                         .build().toString().getBytes()));
                 client.close();
+                System.err.println("[+] Connection to client closed 95");
             } catch (ClosedChannelException e) {
                 client.close();
+                System.err.println("[+] Connection to client closed 98");
                 throw new RuntimeException(e);
             }
         }
@@ -112,10 +111,12 @@ public class MiniHttpServer {
             bytesRead = client.read(buffer);
         } catch (IOException e) {
             bytesRead = -1;
+            System.err.println("[+] Reading Error");
         }
         if (bytesRead == -1) {
             try {
                 client.close();
+                System.err.println("[+] Connection to client closed 118");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -139,6 +140,7 @@ public class MiniHttpServer {
                     client.register(selector, SelectionKey.OP_READ, req);
                 } catch (Exception e) {
                     client.close();
+                    System.err.println("[+] Connection to client closed 142");
                     e.printStackTrace();
                 }
             }
@@ -160,11 +162,13 @@ public class MiniHttpServer {
                 clientSocket.register(selector, SelectionKey.OP_WRITE, responseBuffer);
             } catch (Exception e) {
                 clientSocket.close();
+                System.err.println("[+] Connection to client closed 164");
             }
         } else {
             // All data has been written, close the connection
             try {
                 clientSocket.close();
+                System.err.println("[+] Connection to client closed 170");
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -203,6 +207,7 @@ public class MiniHttpServer {
                     } catch (IOException e) {
                         // Handle IO exception while handling a key
                         closeClientSocket((SocketChannel) key.channel());
+                        System.err.println("[+] Connection to client closed 209");
                     } catch (Exception e) {
                         // Handle URISyntaxException
                         e.printStackTrace();
@@ -223,6 +228,7 @@ public class MiniHttpServer {
             selector.close();
             serverSocketChannel.close();
             executor.shutdown();
+            System.err.println("[+] Closing Server");
         } catch (IOException e) {
             e.printStackTrace();
         }
