@@ -1,98 +1,32 @@
 package com.minihttp.HttpResponse;
 
+import com.minihttp.HttpStatus.HttpStatus;
+
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class HttpResponse {
-    private static final Map<Integer, String> statusCodes = Map.ofEntries(
-            Map.entry(100, "Continue"),
-            Map.entry(101, "Switching Protocols"),
-            Map.entry(200, "OK"),
-            Map.entry(201, "Created"),
-            Map.entry(202, "Accepted"),
-            Map.entry(203, "Non-Authoritative Information"),
-            Map.entry(204, "No Content"),
-            Map.entry(205, "Reset Content"),
-            Map.entry(206, "Partial Content"),
-            Map.entry(300, "Multiple Choices"),
-            Map.entry(302, "Found"),
-            Map.entry(303, "See Other"),
-            Map.entry(304, "Not Modified"),
-            Map.entry(305, "Use Proxy"),
-            Map.entry(400, "Bad Request"),
-            Map.entry(401, "Unauthorized"),
-            Map.entry(402, "Payment Required"),
-            Map.entry(403, "Forbidden"),
-            Map.entry(404, "Not Found"),
-            Map.entry(405, "Method Not Allowed"),
-            Map.entry(406, "Not Acceptable"),
-            Map.entry(407, "Proxy Authentication Required"),
-            Map.entry(408, "Request Timeout"),
-            Map.entry(409, "Conflict"),
-            Map.entry(410, "Gone"),
-            Map.entry(411, "Length Required"),
-            Map.entry(412, "Precondition Failed"),
-            Map.entry(413, "Request Entity Too Large"),
-            Map.entry(414, "Request-URI Too Long"),
-            Map.entry(415, "Unsupported Media Type"),
-            Map.entry(416, "Requested Range Not Satisfiable"),
-            Map.entry(417, "Expectation Failed"),
-            Map.entry(500, "Internal Server Error"),
-            Map.entry(501, "Not Implemented"),
-            Map.entry(502, "Bad Gateway"),
-            Map.entry(503, "Service Unavailable"),
-            Map.entry(504, "Gateway Timeout"),
-            Map.entry(505, "HTTP Version Not Supported")
-    );
-    private final Integer statusCode;
+
+    private final int statusCode;
     private final Map<String, List<String>> responseHeader;
     private final Optional<Object> entity;
+    private final byte[] httpResponseBytes;
 
-    private HttpResponse(Integer s, Map<String, List<String>> rh, Optional<Object> e) {
-        this.statusCode = s;
-        this.responseHeader = rh;
-        this.entity = e;
+    private HttpResponse(int statusCode, Map<String, List<String>> responseHeader, Optional<Object> entity) {
+        this.statusCode = statusCode;
+        this.responseHeader = responseHeader;
+        this.entity = entity;
+        this.httpResponseBytes = generateHttpResponseBytes();
     }
 
-    public Integer getStatusCode() {
+    public int getStatusCode() {
         return statusCode;
     }
 
     @Override
     public String toString() {
-        StringBuilder s = new StringBuilder();
-
-        // Append status line
-        String statusLine = "HTTP/1.1 " + this.statusCode + " " + statusCodes.get(this.statusCode) + "\r\n";
-        s.append(statusLine);
-
-        // Append headers
-        for (Map.Entry<String, List<String>> x : this.responseHeader.entrySet()) {
-            s.append(x.getKey()).append(": ");
-            List<String> values = x.getValue();
-            int size = values.size();
-            for (int i = 0; i < size; i++) {
-                s.append(values.get(i));
-                if (i < size - 1) {
-                    s.append(';');
-                }
-            }
-            s.append("\r\n");
-        }
-
-        // Append entity if present and not empty
-        String entityString = this.entity.map(Object::toString).orElse("");
-        if (!entityString.isEmpty()) {
-            byte[] entityBytes = entityString.getBytes(StandardCharsets.UTF_8);
-            String contentLengthHeader = "Content-Length: " + entityBytes.length + "\r\n\r\n";
-            s.append(contentLengthHeader);
-            s.append(new String(entityBytes));
-        } else {
-            s.append("\r\n");
-        }
-
-        return s.toString();
+        return new String(httpResponseBytes, StandardCharsets.UTF_8);
     }
 
     public Map<String, List<String>> getResponseHeader() {
@@ -103,46 +37,94 @@ public class HttpResponse {
         return entity;
     }
 
+    private byte[] generateHttpResponseBytes() {
+        StringBuilder sb = new StringBuilder();
+
+        // Append status line
+        String statusLine = "HTTP/1.1 " + statusCode + " " + HttpStatus.fromCode(statusCode) + "\r\n";
+        sb.append(statusLine);
+
+        // Calculate total headers size for initial capacity of StringBuilder
+        int totalHeadersSize = 0;
+        for (Map.Entry<String, List<String>> entry : responseHeader.entrySet()) {
+            String headerName = entry.getKey();
+            List<String> values = entry.getValue();
+            totalHeadersSize += headerName.length() + values.stream().mapToInt(String::length).sum() + values.size() - 1;
+        }
+
+        // Append headers
+        sb.ensureCapacity(sb.length() + totalHeadersSize);
+        for (Map.Entry<String, List<String>> entry : responseHeader.entrySet()) {
+            String headerName = entry.getKey();
+            List<String> values = entry.getValue();
+            sb.append(headerName).append(": ");
+            int size = values.size();
+            for (int i = 0; i < size; i++) {
+                sb.append(values.get(i));
+                if (i < size - 1) {
+                    sb.append(';');
+                }
+            }
+            sb.append("\r\n");
+        }
+
+        // Append entity if present and not empty
+        entity.ifPresent(obj -> {
+            String entityString = obj.toString();
+            if (!entityString.isEmpty()) {
+                String contentLengthHeader = "Content-Length: " + entityString.length() + "\r\n\r\n";
+                sb.append(contentLengthHeader);
+                sb.append(entityString);
+            } else {
+                sb.append("\r\n");
+            }
+        });
+
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
     public static class Create {
-        private Integer statusCode;
-        private Map<String, List<String>> responseHeader;
-        private Optional<Object> entity;
+        private int statusCode = 200;
+        private Map<String, List<String>> responseHeader = new HashMap<>();
+        private Optional<Object> entity = Optional.of("");
+        private String contentType = "text/plain";
 
         public Create() {
-            this.responseHeader = new HashMap<>();
-            this.responseHeader.put("Content-Security-Policy", List.of("default-src 'self'"));
-            this.responseHeader.put("X-Frame-Options", List.of("deny"));
-            this.responseHeader.put("X-Content-Type-Options", List.of("nosniff"));
-            this.responseHeader.put("Referrer-Policy", List.of("origin-when-cross-origin"));
-            this.responseHeader.put("Server", List.of("MININIO/1.0.0.0"));
-            this.responseHeader.put("Connection", List.of("keep-alive"));
+            responseHeader.put("Content-Security-Policy", List.of("default-src 'self'"));
+            responseHeader.put("X-Frame-Options", List.of("deny"));
+            responseHeader.put("X-Content-Type-Options", List.of("nosniff"));
+            responseHeader.put("Referrer-Policy", List.of("origin-when-cross-origin"));
+            responseHeader.put("Server", List.of("MININIO/1.0.0.0"));
+            responseHeader.put("Connection", List.of("keep-alive"));
             String pattern = "E, dd MMM yyyy HH:mm:ss z";
             SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern);
             String date = simpleDateFormat.format(new Date());
-            this.responseHeader.put("Date", List.of(date));
-            this.statusCode = 200;
-            this.entity = Optional.of("");
+            responseHeader.put("Date", List.of(date));
         }
 
-        public Create setStatusCode(Integer s) {
-            this.statusCode = s;
+        public Create setStatusCode(int statusCode) {
+            this.statusCode = statusCode;
             return this;
         }
 
-        public Create setResponseHeader(Map<String, List<String>> ls) {
-            this.responseHeader.putAll(ls);
+        public Create setResponseHeader(Map<String, List<String>> responseHeader) {
+            this.responseHeader.putAll(responseHeader);
             return this;
         }
 
-        public Create setEntity(Optional<Object> e) {
-            this.entity = e;
+        public Create setEntity(Optional<Object> entity) {
+            this.entity = entity;
+            return this;
+        }
+
+        public Create setContentType(String contentType) {
+            this.contentType = contentType;
             return this;
         }
 
         public HttpResponse build() {
-
-            return new HttpResponse(this.statusCode, this.responseHeader, this.entity);
+            responseHeader.put("Content-Type", List.of(contentType));
+            return new HttpResponse(statusCode, responseHeader, entity);
         }
-
     }
 }

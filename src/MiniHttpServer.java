@@ -1,18 +1,28 @@
+import com.minihttp.HttpHandler.HttpHandler;
 import com.minihttp.HttpMethod.HttpMethod;
 import com.minihttp.HttpRequest.HttpRequest;
 import com.minihttp.HttpResponse.HttpResponse;
+import com.minihttp.HttpStatus.HttpStatus;
+import com.minihttp.Pair.Pair;
+import com.minihttp.PathParameters.PathParameters;
+import com.minihttp.Router.Router;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Function;
+
 
 public class MiniHttpServer {
     private final Selector selector;
@@ -20,7 +30,7 @@ public class MiniHttpServer {
     private final ByteBuffer buffer;
     private final ExecutorService executor;
 
-    private final Map<URI, AbstractMap.SimpleImmutableEntry<HttpMethod, Function<HttpRequest, HttpResponse>>> routes;
+    private final Router router;
 
     MiniHttpServer(Integer port) throws IOException {
         selector = Selector.open();
@@ -28,163 +38,136 @@ public class MiniHttpServer {
         serverSocketChannel.bind(new InetSocketAddress("localhost", port));
         serverSocketChannel.configureBlocking(false);
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
-        buffer = ByteBuffer.allocate(1024);
+        buffer = ByteBuffer.allocate(2048);
         executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());// Adjust the thread pool size as needed
-        routes = new HashMap<>();
+        router = new Router();
     }
 
-    public void addRoute(URI k, AbstractMap.SimpleImmutableEntry<HttpMethod, Function<HttpRequest, HttpResponse>> r) {
-        this.routes.put(k, r);
+    public void addRoute(String uri, HttpMethod method, HttpHandler handler) throws URISyntaxException {
+        this.router.add(uri, method, handler);
+    }
+
+    public void sendErrorResponse(SocketChannel client, HttpStatus status) throws IOException {
+        sendErrorResponse(client, status.getCode(), status.getMessage());
     }
 
     public void requestHandler(String reqData, SocketChannel client) throws Exception {
-        HttpRequest req = HttpRequest.Create.fromStringRequest(reqData);
-        AbstractMap.SimpleImmutableEntry<HttpMethod, Function<HttpRequest, HttpResponse>> _route = this.routes.get(req.getURI());
-        if (_route != null) {
-            Function<HttpRequest, HttpResponse> h = _route.getValue();
-            HttpMethod reqType = _route.getKey();
-            if (reqType != req.getHttpMethod()) {
-                try {
-                    client.write(ByteBuffer.wrap(
-                            new HttpResponse.Create()
-                                    .setStatusCode(405)
-                                    .setEntity(Optional.of("Method Not Allowed"))
-                                    .build().toString().getBytes()));
-                    client.close();
-                } catch (ClosedChannelException e) {
-                    client.close();
-                    throw new RuntimeException(e);
-                }
-                return;
-            }
-            CompletableFuture<HttpResponse> resp_f = CompletableFuture.supplyAsync(() -> h.apply(req), executor);
+        Pair<HttpStatus, HttpRequest> req_status_handler = HttpRequest.Create.processHttpRequest(reqData);
+        if (req_status_handler.getKey() != HttpStatus.OK) {
+            sendErrorResponse(client, req_status_handler.getKey());
+            return;
+        }
 
-            resp_f.thenAccept(r -> {
-                boolean keepAlive = false;
-                List<String> connectionHeaders = req.getHeader("Connection");
-                if (connectionHeaders != null && connectionHeaders.stream().anyMatch(x -> x.equalsIgnoreCase("Keep-Alive"))) {
-                    keepAlive = true;
-                }
-
-
+        HttpRequest req = req_status_handler.getValue();
+        Pair<PathParameters, HttpHandler> xv = this.router.find(req.getURI(), req.getHttpMethod());
+        if (xv != null) {
+            HttpHandler handler = xv.getValue();
+            PathParameters kv = xv.getKey();
+            try {
+                HttpResponse r = handler.handle(req, kv);
+                boolean keepAlive = isKeepAliveRequested(req);
                 try {
                     client.write(ByteBuffer.wrap(r.toString().getBytes(StandardCharsets.UTF_8)));
                     if (!keepAlive) {
                         client.close();
-                        System.err.println("[+] Connection to client closed 74");
+                        System.out.println("[+] Connection to client closed");
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
-                } finally {
-                    if (!keepAlive) {
-                        try {
-                            client.close();
-                            System.err.println("[+] Connection to client closed 82");
-                        } catch (IOException ex) {
-                            ex.printStackTrace();
-                        }
-                    }
                 }
-            });
+            } catch (Exception e) {
+                sendErrorResponse(client, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
         } else {
-            try {
-                client.write(ByteBuffer.wrap(new HttpResponse.Create()
-                        .setStatusCode(404).setEntity(Optional.of("Route not found"))
-                        .build().toString().getBytes()));
-                client.close();
-                System.err.println("[+] Connection to client closed 95");
-            } catch (ClosedChannelException e) {
-                client.close();
-                System.err.println("[+] Connection to client closed 98");
-                throw new RuntimeException(e);
-            }
+            sendErrorResponse(client, HttpStatus.NOT_FOUND);
         }
-
     }
 
-    void handleReadKey(SelectionKey key) throws Exception {
-        SocketChannel client = (SocketChannel) key.channel(); // get client channel
-        StringBuilder req = (StringBuilder) key.attachment(); // get the attached object to channel
+    private HttpResponse createErrorResponse(HttpStatus status, String message) {
+        return new HttpResponse.Create()
+                .setStatusCode(status.getCode())
+                .setEntity(Optional.of(message))
+                .build();
+    }
 
-        int bytesRead;
+    private boolean isKeepAliveRequested(HttpRequest req) {
+        String connectionHeaders = req.getHeader("Connection");
+        return connectionHeaders != null && List.of(connectionHeaders.split(";")).stream().anyMatch(x -> x.equalsIgnoreCase("Keep-Alive"));
+    }
+
+    private void sendErrorResponse(SocketChannel client, int statusCode, String message) throws IOException {
+        client.write(ByteBuffer.wrap(createErrorResponse(Objects.requireNonNull(HttpStatus.fromCode(statusCode)), message).toString().getBytes(StandardCharsets.UTF_8)));
+        client.close();
+    }
+
+
+    public void handleReadKey(SelectionKey key) throws IOException {
+        StringBuilder requestBuilder = new StringBuilder();
+        SocketChannel clientChannel = (SocketChannel) key.channel();
+
         try {
-            bytesRead = client.read(buffer);
-        } catch (IOException e) {
-            bytesRead = -1;
-            System.err.println("[+] Reading Error");
+            // Read data from the client channel
+            int bytesRead = clientChannel.read(buffer);
+
+            // Check for closed connection
+            if (bytesRead == -1) {
+                // Connection closed by the client, handle this scenario
+                clientChannel.close();
+                return;
+            }
+
+            while (bytesRead > 0) {
+                buffer.flip();
+                byte[] bytes = new byte[buffer.remaining()];
+                buffer.get(bytes);
+                requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
+                buffer.clear();
+                bytesRead = clientChannel.read(buffer);
+            }
+
+            this.requestHandler(requestBuilder.toString(), clientChannel);
+        } catch (Exception e) {
+            // Handle IO error, such as network issues
+            e.printStackTrace();
+            clientChannel.close();
+            return;
         }
-        if (bytesRead == -1) {
-            try {
-                client.close();
-                System.err.println("[+] Connection to client closed 118");
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        } else if (bytesRead > 0) {
-            buffer.flip();
 
-            byte[] rData = new byte[buffer.remaining()];
-            buffer.get(rData);
-            req.append(new String(rData, StandardCharsets.UTF_8));
-
-            int endOfRequest = req.indexOf("\r\n\r\n"); // processign partal request like if ...\r\n\r\n .... \r\n\r\n , two requests in single read
-            if (endOfRequest >= 0) {
-                String remainingRequest = req.substring(endOfRequest + 4);
-                key.attach(new StringBuilder(remainingRequest)); // attach data for second req if any in same read operation
-
-                String requestData = req.substring(0, endOfRequest + 4);
-                this.requestHandler(requestData, client);
-
-            } else {
-                try {
-                    client.register(selector, SelectionKey.OP_READ, req);
-                } catch (Exception e) {
-                    client.close();
-                    System.err.println("[+] Connection to client closed 142");
-                    e.printStackTrace();
-                }
-            }
-            buffer.clear();
+        // If everything is successful, clear the buffer and register the channel back for reading.
+        buffer.clear();
+        try {
+            clientChannel.register(key.selector(), SelectionKey.OP_READ);
+        } catch (Exception e) {
+            clientChannel.close();
         }
     }
+
 
     void handleWriteKey(SelectionKey key) throws IOException {
         SocketChannel clientSocket = (SocketChannel) key.channel();
         ByteBuffer responseBuffer = (ByteBuffer) key.attachment();
         try {
             clientSocket.write(responseBuffer);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        if (responseBuffer.remaining() > 0) {
-            // Not all data has been written, register for write interest again
-            try {
+            if (responseBuffer.remaining() == 0) {
+                // All data has been written, close the connection
+                clientSocket.close();
+            } else {
+                // Not all data has been written, register for write interest again
                 clientSocket.register(selector, SelectionKey.OP_WRITE, responseBuffer);
-            } catch (Exception e) {
-                clientSocket.close();
-                System.err.println("[+] Connection to client closed 164");
             }
-        } else {
-            // All data has been written, close the connection
-            try {
-                clientSocket.close();
-                System.err.println("[+] Connection to client closed 170");
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        } catch (IOException e) {
+            // Handle error while writing
+            clientSocket.close();
         }
     }
 
     void handleAcceptKey(SelectionKey key) throws IOException {
         ServerSocketChannel serverSocket = (ServerSocketChannel) key.channel();
-        try {
-            SocketChannel client = serverSocket.accept();
-            client.configureBlocking(false);
-            client.register(selector, SelectionKey.OP_READ, new StringBuilder());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        SocketChannel client = serverSocket.accept();
+        client.configureBlocking(false);
+        client.register(selector, SelectionKey.OP_READ, new StringBuilder());
     }
+
 
     void start() {
         try {
@@ -217,6 +200,8 @@ public class MiniHttpServer {
         } catch (IOException e) {
             // Handle IOException while selecting keys
             e.printStackTrace();
+        } finally {
+            this.stop();
         }
     }
 
