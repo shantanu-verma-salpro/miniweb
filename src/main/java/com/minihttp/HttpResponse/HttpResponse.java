@@ -39,12 +39,9 @@ public class HttpResponse {
 
     private byte[] generateHttpResponseBytes() {
         StringBuilder sb = new StringBuilder();
-
-        // Append status line
         String statusLine = "HTTP/1.1 " + statusCode + " " + HttpStatus.fromCode(statusCode) + "\r\n";
         sb.append(statusLine);
 
-        // Calculate total headers size for initial capacity of StringBuilder
         int totalHeadersSize = 0;
         for (Map.Entry<String, List<String>> entry : responseHeader.entrySet()) {
             String headerName = entry.getKey();

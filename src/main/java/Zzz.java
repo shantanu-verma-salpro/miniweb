@@ -1,15 +1,16 @@
+import com.minihttp.BufferPool.BufferPool;
 import com.minihttp.HttpHandler.HttpHandler;
 import com.minihttp.HttpMethod.HttpMethod;
 import com.minihttp.HttpRequest.HttpRequest;
 import com.minihttp.HttpResponse.HttpResponse;
 import com.minihttp.HttpStatus.HttpStatus;
+import com.minihttp.LogWrapper.LogWrapper;
 import com.minihttp.Pair.Pair;
 import com.minihttp.PathParameters.PathParameters;
 import com.minihttp.Router.Router;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.StandardSocketOptions;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousChannelGroup;
@@ -27,12 +28,15 @@ public class Zzz {
     private final AsynchronousChannelGroup channelGroup;
     private final ExecutorService executor;
     private final Router router;
+    private final BufferPool bufferPool;
 
     public Zzz(int port) throws IOException {
         this.port = port;
         this.executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         this.channelGroup = AsynchronousChannelGroup.withThreadPool(executor);
         router = new Router();
+        bufferPool = new BufferPool();
+        LogWrapper.log("[+] Server on localhost:" + port);
     }
 
     public void addRoute(String uri, HttpMethod method, HttpHandler handler) throws URISyntaxException {
@@ -55,19 +59,17 @@ public class Zzz {
         AsynchronousServerSocketChannel serverChannel = AsynchronousServerSocketChannel.open(channelGroup);
         InetSocketAddress address = new InetSocketAddress("localhost", port);
         serverChannel.bind(address);
-
-        System.out.println("Server listening on " + address);
-
         serverChannel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Void>() {
             @Override
             public void completed(AsynchronousSocketChannel clientChannel, Void attachment) {
                 serverChannel.accept(null, this);
+                LogWrapper.log("[+] Accepted Connection");
                 handleClient(clientChannel);
             }
 
             @Override
             public void failed(Throwable exc, Void attachment) {
-                System.err.println("Failed to accept connection: " + exc.getMessage());
+                LogWrapper.log("[-] Failed to accept connection: " + exc.getMessage());
             }
         });
 
@@ -95,13 +97,12 @@ public class Zzz {
         }
     }
 
+    public Router getRouter() {
+        return this.router;
+    }
+
     private void handleClient(AsynchronousSocketChannel clientChannel) {
-        ByteBuffer buffer = ByteBuffer.allocate(1024);
-        try {
-            clientChannel.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        ByteBuffer buffer = bufferPool.acquireBuffer();
         clientChannel.read(buffer, null, new CompletionHandler<Integer, Void>() {
             @Override
             public void completed(Integer bytesRead, Void attachment) {
@@ -112,6 +113,7 @@ public class Zzz {
                     try {
                         response = requestHandler(message);
                     } catch (Exception e) {
+                        LogWrapper.log("[-] " + e.getMessage());
                         throw new RuntimeException(e);
                     }
 
@@ -129,8 +131,10 @@ public class Zzz {
                             if (bytesWritten > 0) {
                                 try {
                                     clientChannel.close();
-                                    System.out.println("[+] Closing Client Connection ");
+                                    bufferPool.release(buffer);
+                                    LogWrapper.log("[-] Closing Client Connection ");
                                 } catch (IOException e) {
+                                    bufferPool.release(buffer);
                                     throw new RuntimeException(e);
                                 }
                             }
@@ -138,11 +142,13 @@ public class Zzz {
 
                         @Override
                         public void failed(Throwable exc, Void attachment) {
-                            System.err.println("Failed to send response: " + exc.getMessage());
+                            LogWrapper.log("Failed to send response: " + exc.getMessage());
                             try {
+                                bufferPool.release(buffer);
                                 clientChannel.close();
                             } catch (IOException e) {
-                                e.printStackTrace();
+                                bufferPool.release(buffer);
+                                LogWrapper.log("Failed to send response: " + e.getMessage());
                             }
                         }
                     });
@@ -151,11 +157,13 @@ public class Zzz {
 
             @Override
             public void failed(Throwable exc, Void attachment) {
-                System.err.println("Failed to read from client: " + exc.getMessage());
+                LogWrapper.log("Failed to read from client: " + exc.getMessage());
                 try {
+                    bufferPool.release(buffer);
                     clientChannel.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    bufferPool.release(buffer);
+                    LogWrapper.log("Failed to read from client: " + e.getMessage());
                 }
             }
         });

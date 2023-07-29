@@ -11,13 +11,22 @@ public class URLTrieNode {
     Map<Pair<String, HttpMethod>, URLTrieNode> children;
     HttpHandler handler;
     String pathParam;
+    boolean wildcard;
 
 
     public URLTrieNode(HttpHandler handler) {
         children = new HashMap<>();
         this.handler = handler;
         pathParam = null;
+        this.wildcard = false;
+    }
 
+    public boolean isWildcard() {
+        return this.wildcard;
+    }
+
+    public void setIsWildcard(boolean x) {
+        this.wildcard = x;
     }
 
     public String getPathParam() {
@@ -39,4 +48,5 @@ public class URLTrieNode {
     public void setHandler(HttpHandler h) {
         this.handler = h;
     }
+
 }

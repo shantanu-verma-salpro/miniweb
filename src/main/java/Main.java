@@ -1,5 +1,6 @@
 import com.minihttp.HttpMethod.HttpMethod;
 import com.minihttp.HttpRequest.HttpRequest;
+import com.minihttp.HttpRequest.RequestBody;
 import com.minihttp.HttpResponse.HttpResponse;
 import com.minihttp.PathParameters.PathParameters;
 
@@ -17,6 +18,10 @@ public class Main {
 
             BookController bookController = new BookController();
             httpServer.addRoute("/books", HttpMethod.GET, bookController::handleGetAll);
+            httpServer.addRoute("/books/{id}", HttpMethod.GET, bookController::handleGetById);
+            httpServer.addRoute("/books/*", HttpMethod.GET, bookController::handlePost);
+            httpServer.addRoute("/books/*/h", HttpMethod.GET, bookController::handlePut);
+            httpServer.addRoute("/books/*/h/{id}/*", HttpMethod.GET, bookController::handleGetById);
             httpServer.addRoute("/books/1", HttpMethod.GET, bookController::handleGetAll);
             httpServer.addRoute("/libs", HttpMethod.GET, bookController::handleGetAll);
             httpServer.addRoute("/books/{id}", HttpMethod.GET, bookController::handleGetById);
@@ -55,9 +60,10 @@ public class Main {
 
         public HttpResponse handlePost(HttpRequest req, PathParameters p) {
             String responseString = "Handling POST request to add a new book";
+            RequestBody body = req.getRequestBody();
             return new HttpResponse.Create()
                     .setStatusCode(200)
-                    .setEntity(Optional.of(responseString + ":" + req.getRequestBody()))
+                    .setEntity(Optional.of(responseString + ":" + body.asJson().keySet()))
                     .build();
         }
 
