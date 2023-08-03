@@ -1,4 +1,4 @@
-package com.minihttp.Pair;
+package com.minihttp.util.Pair;
 
 import java.util.AbstractMap;
 import java.util.Map;

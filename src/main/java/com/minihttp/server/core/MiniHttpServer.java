@@ -1,11 +1,14 @@
-import com.minihttp.HttpHandler.HttpHandler;
-import com.minihttp.HttpMethod.HttpMethod;
-import com.minihttp.HttpRequest.HttpRequest;
-import com.minihttp.HttpResponse.HttpResponse;
-import com.minihttp.HttpStatus.HttpStatus;
-import com.minihttp.Pair.Pair;
+package com.minihttp.server.core;
+
 import com.minihttp.PathParameters.PathParameters;
-import com.minihttp.Router.Router;
+import com.minihttp.handlers.HttpHandler.HttpHandler;
+import com.minihttp.http.HttpMethod.HttpMethod;
+import com.minihttp.http.HttpRequest.HttpRequest;
+import com.minihttp.http.HttpResponse.HttpResponse;
+import com.minihttp.http.HttpStatus.HttpStatus;
+import com.minihttp.routing.Router.Router;
+import com.minihttp.util.BufferPool.BufferPool;
+import com.minihttp.util.Pair.Pair;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -27,18 +30,19 @@ import java.util.concurrent.Executors;
 public class MiniHttpServer {
     private final Selector selector;
     private final ServerSocketChannel serverSocketChannel;
-    private final ByteBuffer buffer;
+    private final BufferPool pool;
     private final ExecutorService executor;
 
     private final Router router;
 
-    MiniHttpServer(Integer port) throws IOException {
+
+    public MiniHttpServer(Integer port) throws IOException {
         selector = Selector.open();
         serverSocketChannel = ServerSocketChannel.open();
         serverSocketChannel.bind(new InetSocketAddress("localhost", port));
         serverSocketChannel.configureBlocking(false);
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
-        buffer = ByteBuffer.allocate(2048);
+        pool = new BufferPool();
         executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());// Adjust the thread pool size as needed
         router = new Router();
     }
@@ -91,7 +95,7 @@ public class MiniHttpServer {
     }
 
     private boolean isKeepAliveRequested(HttpRequest req) {
-        String connectionHeaders = req.getHeader("Connection");
+        String connectionHeaders = req.getHeader("connection");
         return connectionHeaders != null && List.of(connectionHeaders.split(";")).stream().anyMatch(x -> x.equalsIgnoreCase("Keep-Alive"));
     }
 
@@ -102,7 +106,7 @@ public class MiniHttpServer {
 
 
     public void handleReadKey(SelectionKey key) throws IOException {
-        StringBuilder requestBuilder = new StringBuilder();
+        ByteBuffer buffer = pool.acquireBuffer();
         SocketChannel clientChannel = (SocketChannel) key.channel();
 
         try {
@@ -112,23 +116,20 @@ public class MiniHttpServer {
             // Check for closed connection
             if (bytesRead == -1) {
                 // Connection closed by the client, handle this scenario
+                pool.release(buffer);
                 clientChannel.close();
                 return;
-            }
-
-            while (bytesRead > 0) {
+            } else if (bytesRead > 0) {
                 buffer.flip();
-                byte[] bytes = new byte[buffer.remaining()];
-                buffer.get(bytes);
-                requestBuilder.append(new String(bytes, StandardCharsets.UTF_8));
-                buffer.clear();
-                bytesRead = clientChannel.read(buffer);
+                String message = StandardCharsets.UTF_8.decode(buffer).toString();
+                this.requestHandler(message, clientChannel);
+                pool.release(buffer);
             }
 
-            this.requestHandler(requestBuilder.toString(), clientChannel);
         } catch (Exception e) {
             // Handle IO error, such as network issues
             e.printStackTrace();
+            pool.release(buffer);
             clientChannel.close();
             return;
         }
@@ -138,6 +139,7 @@ public class MiniHttpServer {
         try {
             clientChannel.register(key.selector(), SelectionKey.OP_READ);
         } catch (Exception e) {
+            pool.release(buffer);
             clientChannel.close();
         }
     }
@@ -149,7 +151,6 @@ public class MiniHttpServer {
         try {
             clientSocket.write(responseBuffer);
             if (responseBuffer.remaining() == 0) {
-                // All data has been written, close the connection
                 clientSocket.close();
             } else {
                 // Not all data has been written, register for write interest again
@@ -165,11 +166,11 @@ public class MiniHttpServer {
         ServerSocketChannel serverSocket = (ServerSocketChannel) key.channel();
         SocketChannel client = serverSocket.accept();
         client.configureBlocking(false);
-        client.register(selector, SelectionKey.OP_READ, new StringBuilder());
+        client.register(selector, SelectionKey.OP_READ, null);
     }
 
 
-    void start() {
+    public void start() {
         try {
             while (true) {
                 selector.select();

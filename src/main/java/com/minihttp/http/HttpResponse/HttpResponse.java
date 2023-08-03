@@ -1,6 +1,6 @@
-package com.minihttp.HttpResponse;
+package com.minihttp.http.HttpResponse;
 
-import com.minihttp.HttpStatus.HttpStatus;
+import com.minihttp.http.HttpStatus.HttpStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -82,7 +82,7 @@ public class HttpResponse {
 
     public static class Create {
         private int statusCode = 200;
-        private Map<String, List<String>> responseHeader = new HashMap<>();
+        private final Map<String, List<String>> responseHeader = new HashMap<>();
         private Optional<Object> entity = Optional.of("");
         private String contentType = "text/plain";
 

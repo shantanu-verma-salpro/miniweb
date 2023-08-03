@@ -1,7 +1,7 @@
-package com.minihttp.HttpRequest;
+package com.minihttp.http.HttpRequest;
 
 import com.google.gson.JsonObject;
-import com.minihttp.HttpUtil.HttpUtil;
+import com.minihttp.http.HttpUtil.HttpUtil;
 
 import java.util.Map;
 

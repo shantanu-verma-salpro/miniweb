@@ -1,11 +1,11 @@
-package com.minihttp.HttpParser;
+package com.minihttp.http.HttpParser;
 
-import com.minihttp.HttpMethod.HttpMethod;
-import com.minihttp.HttpRequest.HttpRequest;
-import com.minihttp.HttpRequest.RequestBody;
-import com.minihttp.HttpStatus.HttpStatus;
-import com.minihttp.HttpUtil.HttpUtil;
-import com.minihttp.Pair.Pair;
+import com.minihttp.http.HttpMethod.HttpMethod;
+import com.minihttp.http.HttpRequest.HttpRequest;
+import com.minihttp.http.HttpRequest.RequestBody;
+import com.minihttp.http.HttpStatus.HttpStatus;
+import com.minihttp.http.HttpUtil.HttpUtil;
+import com.minihttp.util.Pair.Pair;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Collections;
@@ -73,17 +73,12 @@ public class HttpParser {
                 }
             }
 
-            if (contentLength != -1) {
                 String requestBody = null;
                 int requestBodyStart = httpRequestString.indexOf("\r\n\r\n");
                 if (requestBodyStart != -1) {
                     requestBodyStart += 4;
                     requestBody = httpRequestString.substring(requestBodyStart);
 
-                    if (requestBody.length() != contentLength) {
-                        status = HttpStatus.BAD_REQUEST;
-                        return new Pair<>(status, null);
-                    }
 
                     try {
                         String charset = HttpUtil.parseContentTypeCharset(contentType);
@@ -113,7 +108,7 @@ public class HttpParser {
                         .build();
 
                 return new Pair<>(status, httpRequest);
-            }
+
         } catch (IllegalArgumentException e) {
             status = HttpStatus.BAD_REQUEST;
         } catch (UnsupportedEncodingException e) {

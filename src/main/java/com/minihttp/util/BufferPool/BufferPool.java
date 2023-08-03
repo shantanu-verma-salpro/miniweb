@@ -1,4 +1,4 @@
-package com.minihttp.BufferPool;
+package com.minihttp.util.BufferPool;
 
 import com.minihttp.LogWrapper.LogWrapper;
 
@@ -7,13 +7,13 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class BufferPool {
     private final ConcurrentLinkedDeque<ByteBuffer> buffer;
-    private final int cap = 1024;
 
     public BufferPool() {
         buffer = new ConcurrentLinkedDeque<>();
         try {
+            int cap = 100024;
             for (int i = 0; i < cap; ++i)
-                buffer.push(ByteBuffer.allocateDirect(1024));
+                buffer.push(ByteBuffer.allocate(1024));
         } catch (Exception e) {
             LogWrapper.log(e.getMessage());
         }

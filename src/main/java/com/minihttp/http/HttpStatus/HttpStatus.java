@@ -1,4 +1,4 @@
-package com.minihttp.HttpStatus;
+package com.minihttp.http.HttpStatus;
 
 public enum HttpStatus {
     CONTINUE(100, "Continue"),

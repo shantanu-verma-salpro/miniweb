@@ -1,4 +1,4 @@
-package com.minihttp.HttpMethod;
+package com.minihttp.http.HttpMethod;
 
 public enum HttpMethod {
     GET,

@@ -1,14 +1,14 @@
-package com.minihttp.URLTrieNode;
+package com.minihttp.routing.URLTrieNode;
 
-import com.minihttp.HttpHandler.HttpHandler;
-import com.minihttp.HttpMethod.HttpMethod;
-import com.minihttp.Pair.Pair;
+import com.minihttp.handlers.HttpHandler.HttpHandler;
+import com.minihttp.http.HttpMethod.HttpMethod;
+import com.minihttp.util.Pair.Pair;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class URLTrieNode {
-    Map<Pair<String, HttpMethod>, URLTrieNode> children;
+    final Map<Pair<String, HttpMethod>, URLTrieNode> children;
     HttpHandler handler;
     String pathParam;
     boolean wildcard;

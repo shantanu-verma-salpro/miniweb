@@ -1,22 +1,20 @@
-package com.minihttp.Router;
+package com.minihttp.routing.Router;
 
-import com.minihttp.HttpHandler.HttpHandler;
-import com.minihttp.HttpMethod.HttpMethod;
-import com.minihttp.Pair.Pair;
 import com.minihttp.PathParameters.PathParameters;
-import com.minihttp.URLTrieNode.URLTrieNode;
-
-import java.net.URISyntaxException;
+import com.minihttp.handlers.HttpHandler.HttpHandler;
+import com.minihttp.http.HttpMethod.HttpMethod;
+import com.minihttp.routing.URLTrieNode.URLTrieNode;
+import com.minihttp.util.Pair.Pair;
 
 
 public class Router {
-    private URLTrieNode node;
+    private final URLTrieNode node;
 
     public Router() {
         node = new URLTrieNode(null);
     }
 
-    public void add(String _u, HttpMethod r, HttpHandler h) throws URISyntaxException {
+    public void add(String _u, HttpMethod r, HttpHandler h) {
         String[] pathQuery = _u.split("\\?");
         String u = pathQuery[0];
         String[] parts = u.substring(1).split("/");
@@ -42,7 +40,6 @@ public class Router {
         String[] parts = u.substring(1).split("/");
         URLTrieNode temp = node;
         URLTrieNode wildcardNode = null;
-        if (temp == null) return null;
         boolean wilcardOccured = false;
         for (String part : parts) {
             URLTrieNode n = temp.getChildren().get(new Pair<>(part, r));

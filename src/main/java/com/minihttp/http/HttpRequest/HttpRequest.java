@@ -1,10 +1,10 @@
-package com.minihttp.HttpRequest;
+package com.minihttp.http.HttpRequest;
 
-import com.minihttp.HttpMethod.HttpMethod;
-import com.minihttp.HttpParser.HttpParser;
-import com.minihttp.HttpStatus.HttpStatus;
-import com.minihttp.HttpUtil.HttpUtil;
-import com.minihttp.Pair.Pair;
+import com.minihttp.http.HttpMethod.HttpMethod;
+import com.minihttp.http.HttpParser.HttpParser;
+import com.minihttp.http.HttpStatus.HttpStatus;
+import com.minihttp.http.HttpUtil.HttpUtil;
+import com.minihttp.util.Pair.Pair;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Collections;
@@ -107,7 +107,7 @@ public class HttpRequest {
             return this;
         }
 
-        public Map<String, String> setQueryParams(String h) throws UnsupportedEncodingException {
+        public Map<String, String> setQueryParams(String h) {
             return HttpUtil.splitParams(h);
         }
 

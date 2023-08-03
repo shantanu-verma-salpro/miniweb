@@ -1,4 +1,4 @@
-package com.minihttp.HttpUtil;
+package com.minihttp.http.HttpUtil;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -12,7 +12,19 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * The HttpUtil class provides utility methods for handling HTTP-related operations such as
+ * URL encoding/decoding, parsing content types, and converting data to JSON or text format.
+ */
 public class HttpUtil {
+    /**
+     * Decodes the given URL-encoded data using the specified charset.
+     *
+     * @param data    The URL-encoded data to be decoded.
+     * @param charset The character set used for decoding.
+     * @return The decoded data as a String.
+     * @throws UnsupportedEncodingException If the specified charset is not supported.
+     */
     static public String decode(String data, String charset) throws UnsupportedEncodingException {
         return URLDecoder.decode(data, charset);
     }
@@ -28,6 +40,8 @@ public class HttpUtil {
 
     public static String asText(Object data) {
         return data.toString();
+
+
     }
 
     public static Map<String, String> splitParams(String data) {
@@ -68,31 +82,19 @@ public class HttpUtil {
     }
 
     public static String getContentType(String fileType) {
-        switch (fileType) {
-            case "html":
-                return "text/html; charset=UTF-8";
-            case "css":
-                return "text/css; charset=UTF-8";
-            case "js":
-                return "application/javascript; charset=UTF-8";
-            case "json":
-                return "application/json; charset=UTF-8";
-            case "xml":
-                return "application/xml; charset=UTF-8";
-            case "pdf":
-                return "application/pdf";
-            case "png":
-                return "image/png";
-            case "jpg":
-            case "jpeg":
-                return "image/jpeg";
-            case "gif":
-                return "image/gif";
-            case "ico":
-                return "image/x-icon";
-            default:
-                return "application/octet-stream";
-        }
+        return switch (fileType) {
+            case "html" -> "text/html; charset=UTF-8";
+            case "css" -> "text/css; charset=UTF-8";
+            case "js" -> "application/javascript; charset=UTF-8";
+            case "json" -> "application/json; charset=UTF-8";
+            case "xml" -> "application/xml; charset=UTF-8";
+            case "pdf" -> "application/pdf";
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "gif" -> "image/gif";
+            case "ico" -> "image/x-icon";
+            default -> "application/octet-stream";
+        };
     }
 
     public static String getExtension(String fileName) {
