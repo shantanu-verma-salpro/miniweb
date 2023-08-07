@@ -3,7 +3,7 @@ import com.minihttp.http.HttpMethod.HttpMethod;
 import com.minihttp.http.HttpRequest.HttpRequest;
 import com.minihttp.http.HttpRequest.RequestBody;
 import com.minihttp.http.HttpResponse.HttpResponse;
-import com.minihttp.server.core.MiniHttpServer;
+import com.minihttp.server.core.MiniServer;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -15,7 +15,7 @@ public class Main {
         int port = 8090;
 
         try {
-            MiniHttpServer httpServer = new MiniHttpServer(port);
+            MiniServer httpServer = new MiniServer();
 
             BookController bookController = new BookController();
             httpServer.addRoute("/books", HttpMethod.GET, bookController::handleGetAll);
